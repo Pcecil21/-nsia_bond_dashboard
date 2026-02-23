@@ -1,0 +1,37 @@
+Month,Category,Subcategory,Actual,Budget
+Sept,Revenue,Contract Ice,142500,120000
+Sept,Revenue,Public Programs,52800,42197
+Sept,Revenue,Tournaments,8500,5000
+Sept,Revenue,Lease Income,7401,7000
+Sept,Revenue,Other Building,13000,10000
+Sept,Revenue,Total,224201,184197
+Sept,Expense,Payroll,32500,34000
+Sept,Expense,Operations,28700,30000
+Sept,Expense,Utilities,22000,24000
+Sept,Expense,Repairs & Maintenance,15497,16752
+Sept,Expense,Program Expenses,12000,12000
+Sept,Expense,Office & Admin,8000,8000
+Sept,Expense,Insurance,6000,6000
+Sept,Expense,Total,124697,130752
+Sept,Net,Net Income,102710,56651
+Sept,YTD Revenue,Total,554712,552592
+Sept,YTD Expense,Total,410069,392255
+Sept,YTD Net,Net Income,144643,160337
+Nov,Revenue,Contract Ice,155000,145000
+Nov,Revenue,Public Programs,55022,48000
+Nov,Revenue,Tournaments,6500,5500
+Nov,Revenue,Lease Income,7500,7200
+Nov,Revenue,Other Building,16000,12000
+Nov,Revenue,Total,240022,217700
+Nov,Expense,Payroll,38000,35000
+Nov,Expense,Operations,32000,30000
+Nov,Expense,Utilities,28000,26000
+Nov,Expense,Repairs & Maintenance,18496,17000
+Nov,Expense,Program Expenses,13000,12500
+Nov,Expense,Office & Admin,9000,8500
+Nov,Expense,Insurance,6000,6000
+Nov,Expense,Total,144496,135000
+Nov,Net,Net Income,97387,84561
+Nov,YTD Revenue,Total,1004733,1006447
+Nov,YTD Expense,Total,670585,642197
+Nov,YTD Net,Net Income,334148,364250

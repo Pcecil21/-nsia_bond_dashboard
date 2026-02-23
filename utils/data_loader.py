@@ -504,3 +504,116 @@ def compute_cscg_scorecard() -> pd.DataFrame:
 
     df["Status"] = df.apply(check_compliance, axis=1)
     return df
+
+
+# ── Phase 2: Monthly Financials ─────────────────────────────────────────
+
+@st.cache_data
+def load_monthly_pnl() -> pd.DataFrame:
+    """Monthly P&L budget vs actuals from financial summary PDFs."""
+    return pd.read_csv(_path("monthly_pnl.csv"))
+
+
+@st.cache_data
+def load_cash_forecast() -> pd.DataFrame:
+    """12-month cash forecast Jul 2025 - Jun 2026."""
+    return pd.read_csv(_path("cash_forecast.csv"))
+
+
+@st.cache_data
+def load_contract_receivables() -> pd.DataFrame:
+    """Contract receivables by customer (Sept and Nov snapshots)."""
+    return pd.read_csv(_path("contract_receivables.csv"))
+
+
+# ── Phase 2: Multi-Year Trends ──────────────────────────────────────────
+
+@st.cache_data
+def load_multiyear_revenue() -> pd.DataFrame:
+    """3-year revenue and expense by category from Budget Rev 4 + Form 990."""
+    return pd.read_csv(_path("multiyear_revenue.csv"))
+
+
+@st.cache_data
+def load_payroll_benchmarks() -> pd.DataFrame:
+    """NSIA vs peer park district payroll benchmarks."""
+    return pd.read_csv(_path("payroll_benchmarks.csv"))
+
+
+# ── Phase 2: Ice Utilization ────────────────────────────────────────────
+
+@st.cache_data
+def load_weekday_ice_summary() -> pd.DataFrame:
+    """Weekday ice allocation summary (rows 46-49 of Sheet1)."""
+    df = pd.read_excel(_path("ice_weekday_breakdown.xlsx"),
+                       sheet_name="Sheet1", header=None)
+    # Summary at rows 46-49: row 46 is header, 47-49 are clubs
+    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    records = []
+    for row_idx in range(47, 50):
+        club = str(df.iloc[row_idx, 0])
+        current_vals = [pd.to_numeric(df.iloc[row_idx, c], errors="coerce") for c in range(1, 6)]
+        current_total = pd.to_numeric(df.iloc[row_idx, 6], errors="coerce")
+        proposed_vals = [pd.to_numeric(df.iloc[row_idx, c], errors="coerce") for c in range(11, 16)]
+        proposed_total = pd.to_numeric(df.iloc[row_idx, 16], errors="coerce")
+        for i, day in enumerate(days):
+            records.append({
+                "Club": club,
+                "Day": day,
+                "Current Hours": current_vals[i],
+                "Proposed Hours": proposed_vals[i],
+            })
+        records.append({
+            "Club": club,
+            "Day": "Total",
+            "Current Hours": current_total,
+            "Proposed Hours": proposed_total,
+        })
+    return pd.DataFrame(records)
+
+
+@st.cache_data
+def load_weekend_ice_summary() -> pd.DataFrame:
+    """Weekend ice allocation summary (rows 91-94)."""
+    df = pd.read_excel(_path("ice_weekend_breakdown.xlsx"), header=None)
+    # Row 91 header, 92-94 clubs
+    # Current: cols 1-2 (Wknd1 Sat/Sun), col 3 (Total W1), cols 5-6 (Wknd2 Sat/Sun), col 7 (Total W2)
+    # Proposed: cols 10-11, 12, cols 14-15, 16
+    records = []
+    for row_idx in range(92, 95):
+        club = str(df.iloc[row_idx, 0])
+        records.append({
+            "Club": club,
+            "Weekend": "Weekend 1",
+            "Current Saturday": pd.to_numeric(df.iloc[row_idx, 1], errors="coerce"),
+            "Current Sunday": pd.to_numeric(df.iloc[row_idx, 2], errors="coerce"),
+            "Current Total": pd.to_numeric(df.iloc[row_idx, 3], errors="coerce"),
+            "Proposed Saturday": pd.to_numeric(df.iloc[row_idx, 10], errors="coerce"),
+            "Proposed Sunday": pd.to_numeric(df.iloc[row_idx, 11], errors="coerce"),
+            "Proposed Total": pd.to_numeric(df.iloc[row_idx, 12], errors="coerce"),
+        })
+        records.append({
+            "Club": club,
+            "Weekend": "Weekend 2",
+            "Current Saturday": pd.to_numeric(df.iloc[row_idx, 5], errors="coerce"),
+            "Current Sunday": pd.to_numeric(df.iloc[row_idx, 6], errors="coerce"),
+            "Current Total": pd.to_numeric(df.iloc[row_idx, 7], errors="coerce"),
+            "Proposed Saturday": pd.to_numeric(df.iloc[row_idx, 14], errors="coerce"),
+            "Proposed Sunday": pd.to_numeric(df.iloc[row_idx, 15], errors="coerce"),
+            "Proposed Total": pd.to_numeric(df.iloc[row_idx, 16], errors="coerce"),
+        })
+    return pd.DataFrame(records)
+
+
+@st.cache_data
+def load_winnetka_weekend_summary() -> pd.DataFrame:
+    """Winnetka usage gaps — weekend summary."""
+    return pd.read_excel(_path("winnetka_usage_gaps.xlsx"),
+                         sheet_name="Weekend_Summary_WithCut")
+
+
+@st.cache_data
+def load_winnetka_day_level_gaps() -> pd.DataFrame:
+    """Winnetka usage gaps — day-level detail."""
+    return pd.read_excel(_path("winnetka_usage_gaps.xlsx"),
+                         sheet_name="Day_Level_Gaps_WithCut")

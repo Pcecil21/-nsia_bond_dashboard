@@ -55,6 +55,9 @@ st.sidebar.markdown(
     - **Operations** — Ice Revenue & CSCG
     - **Variance Alerts** — Stoplight flags
     - **CSCG Scorecard** — Contract compliance
+    - **Monthly Financials** — P&L, Cash, Receivables
+    - **Multi-Year Trends** — 3yr Revenue & Payroll
+    - **Ice Utilization** — Allocation & Gaps
     """
 )
 st.sidebar.markdown("---")
