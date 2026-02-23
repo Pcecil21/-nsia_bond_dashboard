@@ -44,87 +44,13 @@ def style_chart(fig, height=450):
     return fig
 
 st.title("Operations")
-st.caption("Hockey schedule, ice revenue, and CSCG management relationship")
+st.caption("Ice revenue, CSCG management relationship, and expense approval overview")
 
 from utils.data_loader import (
-    load_hockey_schedule,
     load_revenue_reconciliation,
     load_cscg_relationship,
     load_expense_flow_summary,
 )
-
-# ── Hockey Schedule ───────────────────────────────────────────────────────
-st.header("Hockey Schedule — New Trier Varsity")
-
-schedule = load_hockey_schedule()
-
-# Parse results
-def parse_result(val):
-    if pd.isna(val):
-        return "TBD"
-    s = str(val).strip()
-    if "(W)" in s:
-        return "Win"
-    elif "(L)" in s:
-        return "Loss"
-    elif "(T)" in s or "(OTL)" in s:
-        return "Tie/OTL"
-    return "Upcoming"
-
-schedule["Outcome"] = schedule["Result / Time"].apply(parse_result)
-
-def outcome_style(val):
-    styles = {
-        "Win": "background-color: #00d08433; color: #7bdcb5; font-weight: bold",
-        "Loss": "background-color: #eb144c33; color: #ff6b6b; font-weight: bold",
-        "Tie/OTL": "background-color: #fcb90033; color: #fcb900; font-weight: bold",
-    }
-    return styles.get(val, "")
-
-st.dataframe(
-    schedule.style.map(outcome_style, subset=["Outcome"]),
-    use_container_width=True,
-    hide_index=True,
-    height=400,
-)
-
-# Record summary
-wins = len(schedule[schedule["Outcome"] == "Win"])
-losses = len(schedule[schedule["Outcome"] == "Loss"])
-ties = len(schedule[schedule["Outcome"].isin(["Tie/OTL"])])
-upcoming = len(schedule[schedule["Outcome"] == "Upcoming"])
-
-col1, col2, col3, col4 = st.columns(4)
-with col1:
-    st.metric("Wins", wins)
-with col2:
-    st.metric("Losses", losses)
-with col3:
-    st.metric("Ties/OTL", ties)
-with col4:
-    st.metric("Upcoming", upcoming)
-
-# Win/Loss pie
-fig_record = go.Figure(go.Pie(
-    labels=["Wins", "Losses", "Ties/OTL", "Upcoming"],
-    values=[wins, losses, ties, upcoming],
-    hole=0.55,
-    marker=dict(
-        colors=["#00d084", "#eb144c", "#fcb900", "#636e72"],
-        line=dict(color="#0a192f", width=2),
-    ),
-    textinfo="label+value",
-    textfont=dict(size=13, color="#e6f1ff"),
-    hovertemplate="<b>%{label}</b>: %{value}<br>%{percent:.1%}<extra></extra>",
-))
-fig_record.update_layout(
-    title=dict(text="Season Record", font=dict(size=16, color=TITLE_COLOR)),
-    showlegend=False,
-    annotations=[dict(text=f"<b>{wins}-{losses}</b>",
-                      x=0.5, y=0.5, font_size=22, font_color="#e6f1ff", showarrow=False)],
-)
-style_chart(fig_record, 380)
-st.plotly_chart(fig_record, use_container_width=True)
 
 # ── Ice Revenue by Program ────────────────────────────────────────────────
 st.header("Ice Revenue by Program")

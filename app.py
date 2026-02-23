@@ -52,7 +52,7 @@ st.sidebar.markdown(
     - **Financial Overview** — Budget variances
     - **Bond & Debt** — Obligations & hidden flows
     - **Revenue & Ads** — Advertising pipeline
-    - **Operations** — Schedule & CSCG
+    - **Operations** — Ice Revenue & CSCG
     - **Variance Alerts** — Stoplight flags
     - **CSCG Scorecard** — Contract compliance
     """
