@@ -334,11 +334,11 @@ st.plotly_chart(fig_gl, use_container_width=True)
 # Key entries callout
 st.info(
     "**Key Entries Affecting Budget-to-Actual Reconciliation:**\n\n"
-    "- **MV2025-9** — $632K fixed asset capitalization (reclassifies capital expenditures "
+    "- **MV2025-9** — \\$632K fixed asset capitalization (reclassifies capital expenditures "
     "from operating expenses to the balance sheet, reducing reported expenses)\n\n"
-    "- **MV2025-16** — $107K insurance reclassification (moves insurance payments between "
+    "- **MV2025-16** — \\$107K insurance reclassification (moves insurance payments between "
     "prepaid assets and expense accounts, affecting period expenses)\n\n"
-    "- **MV2025-17** — $7.5K accrued scoreboard expense (recognizes scoreboard obligation "
+    "- **MV2025-17** — \\$7.5K accrued scoreboard expense (recognizes scoreboard obligation "
     "not yet invoiced, increasing liabilities and expenses)"
 )
 
@@ -417,10 +417,11 @@ vm1.metric("Invoice Verification Rate", f"{verification_rate:.1f}%")
 vm2.metric("Verified by Invoice", f"${total_invoice:,.0f}")
 vm3.metric("Uninvoiced Gap", f"${invoice_gap:,.0f}")
 
-st.warning(
-    f"**Invoice Gap: ${invoice_gap:,.0f}**\n\n"
-    f"Only {verification_rate:.1f}% of YTD expenses (${total_actual:,.0f}) can be traced to "
-    f"board-reviewed invoices (${total_invoice:,.0f}). The remaining ${invoice_gap:,.0f} "
+gap_msg = (
+    f"**Invoice Gap: \\${invoice_gap:,.0f}**\n\n"
+    f"Only {verification_rate:.1f}% of YTD expenses (\\${total_actual:,.0f}) can be traced to "
+    f"board-reviewed invoices (\\${total_invoice:,.0f}). The remaining \\${invoice_gap:,.0f} "
     "flows through CSCG auto-pay, fixed obligations, or categories without individual "
     "invoice verification. This limits the board's ability to verify dollar-for-dollar spending."
 )
+st.warning(gap_msg)
