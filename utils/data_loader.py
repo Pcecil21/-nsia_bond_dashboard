@@ -76,7 +76,7 @@ def load_expense_reconciliation() -> pd.DataFrame:
     data.columns = headers[:len(data.columns)]
     # Keep only actual line items (exclude repeated sub-headers and blanks)
     data = data.dropna(subset=["Line Item"])
-    skip_patterns = r"^(PAYROLL|OPERATIONS|OFFICE|PROGRAM|Line Item|NaN)"
+    skip_patterns = r"^(PAYROLL EXPENSES|OPERATIONS EXPENSES|OFFICE, INSURANCE|PROGRAM SERVICE|Line Item|NaN)"
     data = data[~data["Line Item"].str.match(skip_patterns, case=False, na=False)]
     data = data.reset_index(drop=True)
     for col in headers[1:9]:
@@ -617,3 +617,273 @@ def load_winnetka_day_level_gaps() -> pd.DataFrame:
     """Winnetka usage gaps — day-level detail."""
     return pd.read_excel(_path("winnetka_usage_gaps.xlsx"),
                          sheet_name="Day_Level_Gaps_WithCut")
+
+
+# ── Phase 3: Reconciliation ───────────────────────────────────────────────
+
+@st.cache_data
+def load_proposed_entries() -> pd.DataFrame:
+    """Parse 19 adjusting journal entries from proposed_entries.xlsx.
+    Layout: cols B(1)/D(3)/F(5)/H(7)/J(9)/L(11) hold data; odd cols are spacers.
+    Header rows repeat at 2, 35, 67.
+    """
+    df = pd.read_excel(_path("proposed_entries.xlsx"),
+                       sheet_name="Proposed Entries", header=None)
+    # Use the meaningful columns
+    data = df[[1, 3, 5, 7, 9, 11]].copy()
+    data.columns = ["Num", "Date", "Memo", "Account", "Debit", "Credit"]
+    # Drop header rows (repeated at 0-2, 35, 67) and all-NaN rows
+    header_rows = {0, 1, 2, 35, 67}
+    data = data.drop(index=[i for i in header_rows if i in data.index], errors="ignore")
+    # Drop rows where Account is NaN (blank separator rows)
+    data = data.dropna(subset=["Account"])
+    # Drop rows that echo the header text
+    data = data[data["Account"] != "Account"]
+    # Forward-fill Num, Date, Memo from the first line of each entry
+    data["Num"] = data["Num"].ffill()
+    data["Date"] = data["Date"].infer_objects(copy=False).ffill()
+    data["Memo"] = data["Memo"].ffill()
+    # Convert numerics
+    data["Debit"] = pd.to_numeric(data["Debit"], errors="coerce").fillna(0)
+    data["Credit"] = pd.to_numeric(data["Credit"], errors="coerce").fillna(0)
+    data["Date"] = pd.to_datetime(data["Date"], errors="coerce")
+    data = data.reset_index(drop=True)
+    return data
+
+
+@st.cache_data
+def load_general_ledger() -> pd.DataFrame:
+    """Read General_Ledger sheet — row 3 = headers, row 4+ = data."""
+    df = pd.read_excel(_path("general_ledger.xlsx"),
+                       sheet_name="General_Ledger", header=None)
+    headers = ["Date", "GL #", "GL Account Name", "Type", "Bank",
+               "Description", "Debit", "Credit", "Payee"]
+    data = df.iloc[4:].copy()
+    data.columns = headers[:len(data.columns)]
+    # Drop the TOTALS row and blanks
+    data = data.dropna(subset=["GL Account Name"])
+    data = data[~data["GL Account Name"].str.contains("TOTAL", case=False, na=False)]
+    data["Date"] = pd.to_datetime(data["Date"], errors="coerce")
+    data["Debit"] = pd.to_numeric(data["Debit"], errors="coerce").fillna(0)
+    data["Credit"] = pd.to_numeric(data["Credit"], errors="coerce").fillna(0)
+    data["GL #"] = pd.to_numeric(data["GL #"], errors="coerce")
+    data = data.reset_index(drop=True)
+    return data
+
+
+@st.cache_data
+def load_gl_account_summary() -> pd.DataFrame:
+    """Aggregate GL transactions by account — sum debits, credits, count."""
+    gl = load_general_ledger()
+    summary = gl.groupby(["GL #", "GL Account Name", "Type"]).agg(
+        Total_Debit=("Debit", "sum"),
+        Total_Credit=("Credit", "sum"),
+        Transaction_Count=("Debit", "count"),
+    ).reset_index()
+    summary["Net"] = summary["Total_Debit"] - summary["Total_Credit"]
+    return summary
+
+
+@st.cache_data
+def load_bills_summary() -> pd.DataFrame:
+    """Read All Bills sheet — row 0 = header, 111 invoice rows."""
+    df = pd.read_excel(_path("bills_summary.xlsx"),
+                       sheet_name="All Bills", header=0)
+    # Drop the TOTAL row
+    df = df.dropna(subset=["Vendor"])
+    df = df[~df["Vendor"].str.contains("TOTAL", case=False, na=False)]
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce")
+    df = df.reset_index(drop=True)
+    return df
+
+
+@st.cache_data
+def load_bills_by_category() -> pd.DataFrame:
+    """Read Category Summary sheet — 7 categories."""
+    df = pd.read_excel(_path("bills_summary.xlsx"),
+                       sheet_name="Category Summary", header=0)
+    df = df.dropna(subset=["Category"])
+    df["Total Amount"] = pd.to_numeric(df["Total Amount"], errors="coerce")
+    df["% of Total"] = pd.to_numeric(df["% of Total"], errors="coerce")
+    df = df.reset_index(drop=True)
+    return df
+
+
+@st.cache_data
+def load_bills_by_vendor() -> pd.DataFrame:
+    """Read Vendor Summary sheet — 28 vendors."""
+    df = pd.read_excel(_path("bills_summary.xlsx"),
+                       sheet_name="Vendor Summary", header=0)
+    df = df.dropna(subset=["Vendor"])
+    df["Total Amount"] = pd.to_numeric(df["Total Amount"], errors="coerce")
+    df = df.reset_index(drop=True)
+    return df
+
+
+@st.cache_data
+def build_reconciliation_master() -> pd.DataFrame:
+    """Core 4-way reconciliation: merge budget expenses + expense flow financials on line item.
+    Computes Budget-Actual Variance, Actual-Invoice Variance, and Status.
+    """
+    budget = load_expense_reconciliation()
+    flow = load_expense_flow()
+
+    # Explicit name mapping: budget line item → expense flow category
+    budget_to_flow = {
+        "Electric": "Electric (Engie)",
+        "Gas (Nicor)": "Gas (Nicor)",
+        "Janitorial Supplies": "Janitorial Supplies (Ramrod)",
+        "Insurance (Liab/Prop/D&O)": "Insurance - Liab, Prop, D&O",
+        "Snowplow": "Landscaping/Snow",
+        "Landscaping": "Landscaping/Snow",
+        "Propane": "Propane",
+        "Building Maintenance": "Building Maintenance",
+        "Outside Consultants": "Auditor/Consultants",
+        "Legal Fees": "Auditor/Consultants",
+        "Cable/Internet": "Cable/Internet",
+        "Security": "Security",
+        "Operation Supplies": "Operation Supplies",
+        "Office Payroll": "Office Payroll",
+        "Operations Payroll": "Operations Payroll",
+        "Workers Comp Insurance": "Workers Comp Insurance",
+        "Men's League Payroll": "Men's League Payroll",
+        "Management Fees": "Management Fees",
+        "Land Lease": "Land Lease (Techny)",
+        "Techny Loan Interest": "Techny Loan Interest",
+        "Interest Expense (DSRF)": "Bond Interest (DSRF)",
+        "Property Taxes": "Property Taxes",
+        "Trustee Admin Fee": "Trustee Admin Fee (UMB)",
+        "Scrubber Lease": "Scrubber Lease",
+        "Scoreboard Software (Expense)": "Scoreboard Software",
+        "On Ice Instruction": "Youth Programs (instruction)",
+        "Off Ice Instruction": "Youth Programs (instruction)",
+        "Advertising/Marketing (Youth)": "Youth Programs (instruction)",
+        "Youth Program Supplies": "Youth Programs (instruction)",
+    }
+
+    # Build flow lookup by category name
+    flow_lookup = {}
+    for _, row in flow.iterrows():
+        cat = str(row["Expense Category"]).strip()
+        flow_lookup[cat] = row
+
+    # Group budget items by their mapped flow category to handle many-to-one
+    from collections import defaultdict
+    flow_groups = defaultdict(list)  # flow_cat -> list of budget rows
+    unmatched_budget = []
+
+    for _, br in budget.iterrows():
+        item = str(br["Line Item"]).strip()
+        if item.startswith("Total") or not item:
+            continue
+        mapped = budget_to_flow.get(item)
+        if mapped and mapped in flow_lookup:
+            flow_groups[mapped].append(br)
+        elif item in flow_lookup:
+            flow_groups[item].append(br)
+        else:
+            unmatched_budget.append(br)
+
+    rows = []
+    seen_flow_cats = set()
+
+    # Process grouped items (many budget → one flow category)
+    for flow_cat, budget_rows in flow_groups.items():
+        seen_flow_cats.add(flow_cat)
+        fr = flow_lookup[flow_cat]
+        actual_val = float(fr["YTD per Financials"]) if pd.notna(fr.get("YTD per Financials")) else 0
+        invoice_val = float(fr["YTD from Invoices"]) if pd.notna(fr.get("YTD from Invoices")) else 0
+        approval = str(fr.get("Approval Method", ""))
+
+        if len(budget_rows) == 1:
+            # One-to-one: show the budget item name
+            br = budget_rows[0]
+            budget_amt = br.get("CSCG YTD Budget")
+            if pd.isna(budget_amt):
+                budget_amt = br.get("Proposal YTD Budget")
+            budget_val = float(budget_amt) if pd.notna(budget_amt) else 0
+            label = str(br["Line Item"]).strip()
+        else:
+            # Many-to-one: combine budget items, use flow category name
+            budget_val = 0
+            names = []
+            for br in budget_rows:
+                amt = br.get("CSCG YTD Budget")
+                if pd.isna(amt):
+                    amt = br.get("Proposal YTD Budget")
+                budget_val += float(amt) if pd.notna(amt) else 0
+                names.append(str(br["Line Item"]).strip())
+            label = flow_cat + " (" + " + ".join(names) + ")"
+
+        ba_var = actual_val - budget_val
+        ai_var = invoice_val - actual_val
+
+        if actual_val == 0 and invoice_val == 0 and budget_val > 0:
+            status = "Budget-Only"
+        elif invoice_val == 0 and actual_val > 0:
+            status = "No Invoice Trail"
+        elif abs(ba_var) > 5000:
+            status = "Major Variance"
+        elif abs(ba_var) > 500:
+            status = "Minor Variance"
+        else:
+            status = "Matched"
+
+        rows.append({
+            "Line Item": label,
+            "Budget Amount": budget_val,
+            "Financial (Actual)": actual_val,
+            "Invoice Total": invoice_val,
+            "Budget-Actual Variance": ba_var,
+            "Actual-Invoice Variance": ai_var,
+            "Approval Method": approval,
+            "Status": status,
+        })
+
+    # Unmatched budget items (budget-only)
+    for br in unmatched_budget:
+        item = str(br["Line Item"]).strip()
+        budget_amt = br.get("CSCG YTD Budget")
+        if pd.isna(budget_amt):
+            budget_amt = br.get("Proposal YTD Budget")
+        budget_val = float(budget_amt) if pd.notna(budget_amt) else 0
+        rows.append({
+            "Line Item": item,
+            "Budget Amount": budget_val,
+            "Financial (Actual)": 0,
+            "Invoice Total": 0,
+            "Budget-Actual Variance": -budget_val if budget_val else None,
+            "Actual-Invoice Variance": None,
+            "Approval Method": "",
+            "Status": "Budget-Only",
+        })
+
+    # Add any expense flow categories that didn't match budget items
+    for _, fr in flow.iterrows():
+        cat = str(fr["Expense Category"]).strip()
+        if cat not in seen_flow_cats:
+            actual = fr.get("YTD per Financials")
+            invoice = fr.get("YTD from Invoices")
+            actual_val = float(actual) if pd.notna(actual) else 0
+            invoice_val = float(invoice) if pd.notna(invoice) else 0
+            if actual_val == 0 and invoice_val == 0:
+                continue  # skip empty summary rows
+            ai_var = invoice_val - actual_val
+            rows.append({
+                "Line Item": cat,
+                "Budget Amount": 0,
+                "Financial (Actual)": actual_val,
+                "Invoice Total": invoice_val,
+                "Budget-Actual Variance": actual_val,
+                "Actual-Invoice Variance": ai_var,
+                "Approval Method": fr.get("Approval Method", ""),
+                "Status": "Actual-Only",
+            })
+
+    result = pd.DataFrame(rows)
+    # Sort by absolute variance descending
+    result["_sort"] = result["Budget-Actual Variance"].abs().fillna(0)
+    result = result.sort_values("_sort", ascending=False).drop(columns="_sort")
+    result = result.reset_index(drop=True)
+    return result

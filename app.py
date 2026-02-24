@@ -58,6 +58,7 @@ st.sidebar.markdown(
     - **Monthly Financials** — P&L, Cash, Receivables
     - **Multi-Year Trends** — 3yr Revenue & Payroll
     - **Ice Utilization** — Allocation & Gaps
+    - **Reconciliation** — Budget vs Financials 4-way match
     """
 )
 st.sidebar.markdown("---")
